@@ -6,6 +6,7 @@ from pandastable import Table
 import scipy.spatial.distance
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
+import statsmodels.api as sm
 
 
 
@@ -67,7 +68,7 @@ df.iloc[:, 1:] = df.iloc[:, 1:].applymap(lambda x: float(x.replace('%', '')
 df = df.rename(columns={"Density\n(P/Km2)": "Density (P/Km2)",
                 "Land Area(Km2)": "Land Area (Km2)", 
                 "Life expectancy": "Life Expectancy",
-                "Urban_population": "Urban Population (%)", 
+                "Urban_population": "Urban Population", 
                 "Unemployment rate": "Unemployment Rate (%)",
                 "democracy_eiu": "Democracy Index", 
                 "IndividualismScore": "Individualism Score",
@@ -78,6 +79,8 @@ df.to_csv('CountriesData.csv', index=False)
 #Only normalize for similarity
 df_sim = df.copy()
 df_reg = df.copy()
+
+df_sim = df_sim.drop(columns=["Volume Sold (2022)"])
 
 #Fill na with median
 df_sim.iloc[:, 1:] = df_sim.iloc[:, 1:].apply(lambda x: x.fillna(x.median()))
@@ -146,6 +149,29 @@ rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
 print("R² on training data:", r2)
 print("Root Mean Squared Error on training data:", rmse)
 
+# Fit the model using statsmodels
+# Ensure X_train and y_train are numeric
+X_train = X_train.apply(pd.to_numeric, errors='coerce')  # Convert all columns to numeric, invalid parsing will be NaN
+y_train = pd.to_numeric(y_train, errors='coerce')  # Convert the target variable to numeric
+
+X_train_sm = sm.add_constant(X_train)  # Adds the intercept to the model
+model = sm.OLS(y_train, X_train_sm)  # Ordinary Least Squares regression
+results = model.fit()
+
+# Get the coefficients and p-values
+coefficients = results.params  # Exclude the intercept
+p_values = results.pvalues  # Exclude the intercept
+
+# Create a DataFrame with feature names, coefficients, and p-values
+coeff_df = pd.DataFrame({
+    'Feature': ["Intercept"] + list(X_train.columns),
+    'Coefficient': coefficients,
+    'P-Value': p_values
+})
+
+# Export the coefficients DataFrame to a CSV file
+coeff_df.to_csv('Model_Coefficients.csv', index=False)
+
 # Predict sales for unknown countries
 predicted_sales = reg.predict(X_predict)
 
@@ -158,6 +184,8 @@ df_predicted_sales['Predicted Volume Sold 2022'] = predicted_sales
 df_predicted_sales.to_csv('CountriesData_with_PredictedSales.csv', index=False)
 
 
+
+
 #Show df
 root = tk.Tk()
 root.title("Pandas DataFrame Viewer")
@@ -165,7 +193,7 @@ root.title("Pandas DataFrame Viewer")
 frame = tk.Frame(root)
 frame.pack(fill="both", expand=True)
 
-table = Table(frame, dataframe=df_predicted_sales, showtoolbar=True, showstatusbar=True)
+table = Table(frame, dataframe=df, showtoolbar=True, showstatusbar=True)
 table.show()
 
 root.mainloop()
